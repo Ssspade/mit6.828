@@ -259,18 +259,30 @@ page_init(void)
 	// NB: DO NOT actually touch the physical memory corresponding to
 	// free pages!
 	size_t i;
-	int num_freemem = (int)ROUNDUP(((char*)pages) + (sizeof(struct PageInfo) * npages) -KERNBASE , PGSIZE)/PGSIZE;
-	for (i = 0; i < npages; i++) {
-		if(i==0){
-			pages[i].pp_ref = 1;
-		}else if(i >=npages_basemem && i<num_freemem){
-			pages[i].pp_ref = 1;
-		}else{
-			pages[i].pp_ref = 0;
-			pages[i].pp_link = page_free_list;
-			page_free_list = &pages[i];
-		}
-	}
+	page_free_list = NULL;
+
+	//num_alloc：在extmem区域已经被占用的页的个数
+	int num_alloc = ((uint32_t)boot_alloc(0) - KERNBASE) / PGSIZE;
+	//num_iohole：在io hole区域占用的页数
+	int num_iohole = 96;
+
+	for(i=0; i<npages; i++)
+	{
+	    if(i==0)
+	    {
+		pages[i].pp_ref = 1;
+	    }    
+	    else if(i >= npages_basemem && i < npages_basemem + num_iohole + num_alloc)
+	    {
+		pages[i].pp_ref = 1;
+	    }
+	    else
+	    {
+		pages[i].pp_ref = 0;
+		pages[i].pp_link = page_free_list;
+		page_free_list = &pages[i];
+	    }
+}
 }
 
 //
@@ -288,16 +300,18 @@ page_init(void)
 struct PageInfo *
 page_alloc(int alloc_flags)
 {
-	// Fill this function in
-	if (page_free_list) {
-		struct PageInfo *ret = page_free_list;
-		page_free_list = page_free_list->pp_link;
-		if (alloc_flags & ALLOC_ZERO) 
-			memset(page2kva(ret), 0, PGSIZE);
-		return ret;
-	}
-	return NULL;
-	return 0;
+    struct PageInfo *result;
+    if (page_free_list == NULL)
+        return NULL;
+
+      result= page_free_list;
+      page_free_list = result->pp_link;
+      result->pp_link = NULL;
+
+    if (alloc_flags & ALLOC_ZERO)
+        memset(page2kva(result), 0, PGSIZE); 
+
+      return result;
 }
 
 //
@@ -307,11 +321,14 @@ page_alloc(int alloc_flags)
 void
 page_free(struct PageInfo *pp)
 {
-	// Fill this function in
-	// Hint: You may want to panic if pp->pp_ref is nonzero or
-	// pp->pp_link is not NULL.
-	pp->pp_link = page_free_list;
-	page_free_list = pp;
+    // Fill this function in
+    // Hint: You may want to panic if pp->pp_ref is nonzero or
+    // pp->pp_link is not NULL.
+      assert(pp->pp_ref == 0);
+      assert(pp->pp_link == NULL);
+
+      pp->pp_link = page_free_list;
+      page_free_list = pp;
 }
 
 //
