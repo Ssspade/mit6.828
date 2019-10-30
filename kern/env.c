@@ -114,11 +114,18 @@ envid2env(envid_t envid, struct Env **env_store, bool checkperm)
 void
 env_init(void)
 {
-	// Set up envs array
-	// LAB 3: Your code here.
-
-	// Per-CPU part of the initialization
-	env_init_percpu();
+    // Set up envs array
+    // LAB 3: Your code here.
+    int i;
+    env_free_list = NULL;
+    for(i=NENV-1; i>=0; i--){
+        envs[i].env_id = 0;
+        envs[i].env_status = ENV_FREE;
+        envs[i].env_link = env_free_list;
+        env_free_list = &envs[i];
+    }
+    // Per-CPU part of the initialization
+    env_init_percpu();
 }
 
 // Load GDT and segment descriptors.
@@ -179,7 +186,19 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
+	e->env_pgdir = (pde_t *)page2kva(p);
+    	p->pp_ref++;
 
+    	//Map the directory below UTOP.
+   	 for(i = 0; i < PDX(UTOP); i++) {
+        	e->env_pgdir[i] = 0;        
+    	}
+
+    	//Map the directory above UTOP
+   	 for(i = PDX(UTOP); i < NPDENTRIES; i++) {
+        	e->env_pgdir[i] = kern_pgdir[i];
+    	}
+        
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
 	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
@@ -261,6 +280,21 @@ static void
 region_alloc(struct Env *e, void *va, size_t len)
 {
 	// LAB 3: Your code here.
+	void* start = (void *)ROUNDDOWN((uint32_t)va, PGSIZE);
+    	void* end = (void *)ROUNDUP((uint32_t)va+len, PGSIZE);
+    	struct PageInfo *p = NULL;
+    	void* i;
+    	int r;
+    	for(i=start; i<end; i+=PGSIZE){
+        	p = page_alloc(0);
+        	if(p == NULL)
+            	panic(" region alloc, allocation failed.");
+
+        	r = page_insert(e->env_pgdir, p, i, PTE_W | PTE_U);
+        	if(r != 0) {
+            		panic("region alloc error");
+        	}
+    	}
 	// (But only if you need it for load_icode.)
 	//
 	// Hint: It is easier to use region_alloc if the caller can pass
@@ -323,10 +357,37 @@ load_icode(struct Env *e, uint8_t *binary)
 	//  What?  (See env_run() and env_pop_tf() below.)
 
 	// LAB 3: Your code here.
+	struct Elf* header = (struct Elf*)binary;
+    
+    	if(header->e_magic != ELF_MAGIC) {
+        	panic("load_icode failed: The binary we load is not elf.\n");
+    	}
 
+    	if(header->e_entry == 0){
+        	panic("load_icode failed: The elf file can't be excuterd.\n");
+    	}
+
+    	e->env_tf.tf_eip = header->e_entry;
+
+    	lcr3(PADDR(e->env_pgdir));   //?????
+
+    	struct Proghdr *ph, *eph;
+    	ph = (struct Proghdr* )((uint8_t *)header + header->e_phoff);
+    	eph = ph + header->e_phnum;
+    	for(; ph < eph; ph++) {
+        	if(ph->p_type == ELF_PROG_LOAD) {
+            		if(ph->p_memsz - ph->p_filesz < 0) {
+                		panic("load icode failed : p_memsz < p_filesz.\n");
+            		}
+
+            	region_alloc(e, (void *)ph->p_va, ph->p_memsz);
+            	memmove((void *)ph->p_va, binary + ph->p_offset, ph->p_filesz);
+            	memset((void *)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
+        	}
+    	} 
 	// Now map one page for the program's initial stack
 	// at virtual address USTACKTOP - PGSIZE.
-
+	region_alloc(e,(void *)(USTACKTOP-PGSIZE), PGSIZE);
 	// LAB 3: Your code here.
 }
 
@@ -341,6 +402,14 @@ void
 env_create(uint8_t *binary, enum EnvType type)
 {
 	// LAB 3: Your code here.
+	struct Env *e;
+    	int rc;
+    	if((rc = env_alloc(&e, 0)) != 0) {
+        	panic("env_create failed: env_alloc failed.\n");
+    	}
+
+    	load_icode(e, binary);
+    	e->env_type = type;
 }
 
 //
@@ -455,7 +524,16 @@ env_run(struct Env *e)
 	//	e->env_tf.  Go back through the code you wrote above
 	//	and make sure you have set the relevant parts of
 	//	e->env_tf to sensible values.
+	if(curenv != NULL && curenv->env_status == ENV_RUNNING) {
+        curenv->env_status = ENV_RUNNABLE;
+    	}
 
+    	curenv = e;
+    	curenv->env_status = ENV_RUNNING;
+    	curenv->env_runs++;
+    	lcr3(PADDR(curenv->env_pgdir));
+
+    	env_pop_tf(&curenv->env_tf);
 	// LAB 3: Your code here.
 
 	panic("env_run not yet implemented");
