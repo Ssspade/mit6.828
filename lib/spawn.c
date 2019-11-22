@@ -29,12 +29,12 @@ spawn(const char *prog, const char **argv)
 	int perm;
 
 	// This code follows this procedure:
-	//
+	//创建一个新环境，从文件系统加载一个程序映像到其中，然后启动运行这个程序的子环境。
 	//   - Open the program file.
-	//
+	//然后父进程继续独立于子进程运行
 	//   - Read the ELF header, as you have before, and sanity check its
 	//     magic number.  (Check out your load_icode!)
-	//
+	//spawn函数的作用类似于UNIX中的fork，然后在子进程中立即执行exec。
 	//   - Use sys_exofork() to create a new environment.
 	//
 	//   - Set child_tf to an initial struct Trapframe for the child.
@@ -302,6 +302,16 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 5: Your code here.
+	int r, i;
+	for(i=0; i<PGNUM(USTACKTOP);i++)
+	{
+// uvpd、uvpt应该是个全局数组变量，但是数组元素对应的pde、pte具体是什么应该取决于lcr3设置的是哪个环境的内存空间
+		if((uvpd[i/1024] & PTE_P) && (uvpt[i] & PTE_P) && (uvpt[i] & PTE_SHARE)){ //i跟pte一一对应，而i/1024就是该pte所在的页表
+			if ((r = sys_page_map(0, PGADDR(i/1024, i%1024, 0), child,PGADDR(i/1024, i%1024, 0), uvpt[i] & PTE_SYSCALL)) < 0)
+				return r;
+		}
+
+	}
 	return 0;
 }
 

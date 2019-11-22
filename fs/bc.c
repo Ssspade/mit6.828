@@ -25,7 +25,8 @@ va_is_dirty(void *va)
 }
 
 // Fault any disk block that is read in to memory by
-// loading it from disk.
+// loading it from disk.从磁盘加载页面来响应页面错误
+//(1)addr可能没有对齐到block边界，(2)ide_read是操作sectors而不是blocks。
 static void
 bc_pgfault(struct UTrapframe *utf)
 {
@@ -48,12 +49,15 @@ bc_pgfault(struct UTrapframe *utf)
 	// the disk.
 	//
 	// LAB 5: you code here:
-
+	addr = (void *)ROUNDDOWN(addr, BLKSIZE);//对齐
+	if((r = sys_page_alloc(0,addr, PTE_W|PTE_U|PTE_P))<0)
+		panic("in bc_pgfault, sys_page_alloc: %e", r);
+	if((r = ide_read(blockno*BLKSECTS, addr, BLKSECTS))<0)
+		panic("in bc_pgfault, ide_read: %e", r);
 	// Clear the dirty bit for the disk block page since we just read the
 	// block from disk
 	if ((r = sys_page_map(0, addr, 0, addr, uvpt[PGNUM(addr)] & PTE_SYSCALL)) < 0)
 		panic("in bc_pgfault, sys_page_map: %e", r);
-
 	// Check that the block we read was allocated. (exercise for
 	// the reader: why do we do this *after* reading the block
 	// in?)
@@ -67,17 +71,26 @@ bc_pgfault(struct UTrapframe *utf)
 // nothing.
 // Hint: Use va_is_mapped, va_is_dirty, and ide_write.
 // Hint: Use the PTE_SYSCALL constant when calling sys_page_map.
-// Hint: Don't forget to round addr down.
+// Hint: Don't forget to round addr down.刷新
 void
 flush_block(void *addr)
 {
 	uint32_t blockno = ((uint32_t)addr - DISKMAP) / BLKSIZE;
-
+	int r;
 	if (addr < (void*)DISKMAP || addr >= (void*)(DISKMAP + DISKSIZE))
 		panic("flush_block of bad va %08x", addr);
 
 	// LAB 5: Your code here.
-	panic("flush_block not implemented");
+	addr = (void*)ROUNDDOWN(addr, BLKSIZE);
+	if(va_is_mapped(addr) &&va_is_dirty(addr))
+	{
+		if((r = ide_write(blockno*BLKSECTS, addr, BLKSECTS))<0)
+			panic("flush_block , ide_write: %e", r);
+		if((r = sys_page_map(0, addr, 0, addr,  uvpt[PGNUM(addr)] & PTE_SYSCALL))<0)
+			panic("in flush_block, sys_page_map: %e", r);
+	}
+	return;
+	//panic("flush_block not implemented");
 }
 
 // Test that the block cache works, by smashing the superblock and
