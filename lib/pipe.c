@@ -31,7 +31,7 @@ pipe(int pfd[2])
 	int r;
 	struct Fd *fd0, *fd1;
 	void *va;
-
+//分配两个文件描述符作为管道输入输出端，设备类型为管道，对应的数据页部分映射到了同样的物理页，只是设置的文件描述符的权限不同
 	// allocate the file descriptor table entries
 	if ((r = fd_alloc(&fd0)) < 0
 	    || (r = sys_page_alloc(0, fd0, PTE_P|PTE_W|PTE_U|PTE_SHARE)) < 0)

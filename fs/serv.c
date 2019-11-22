@@ -204,17 +204,25 @@ serve_set_size(envid_t envid, struct Fsreq_set_size *req)
 // in ipc->read.req_fileid.  Return the bytes read from the file to
 // the caller in ipc->readRet, then update the seek position.  Returns
 // the number of bytes successfully read, or < 0 on error.
+//首先找到ipc->read->req_fileid对应的OpenFile，然后调用file_read去读内容到ipc->readRet->ret_buf
 int
 serve_read(envid_t envid, union Fsipc *ipc)
 {
 	struct Fsreq_read *req = &ipc->read;
 	struct Fsret_read *ret = &ipc->readRet;
-
+	struct OpenFile *o;
+	int r;
 	if (debug)
 		cprintf("serve_read %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
 
 	// Lab 5: Your code here:
-	return 0;
+	// First, use openfile_lookup to find the relevant open file.
+	// On failure, return the error code to the client with ipc_send.
+	if((r = openfile_lookup(envid, req->req_fileid, &o))<0) return r;
+	r = file_read(o->o_file, ret->ret_buf, req->req_n, o->o_fd->fd_offset);
+	if(r<0) return r;
+	o->o_fd->fd_offset+=r;//then update the seek position
+	return r;
 }
 
 
@@ -225,11 +233,23 @@ serve_read(envid_t envid, union Fsipc *ipc)
 int
 serve_write(envid_t envid, struct Fsreq_write *req)
 {
+	//struct OpenFile *o;
 	if (debug)
 		cprintf("serve_write %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
 
 	// LAB 5: Your code here.
-	panic("serve_write not implemented");
+	int r;
+        struct OpenFile *o; 
+        if ((r = openfile_lookup(envid, req->req_fileid, &o)) < 0)
+                return r;
+        // 多于的就扔掉，确实不太合理，感觉应该循环写入的
+        int req_n = req->req_n > PGSIZE ? PGSIZE : req->req_n;
+        if((r = file_write(o->o_file, req->req_buf, req_n, o->o_fd->fd_offset))<0)
+                return r;
+        o->o_fd->fd_offset += r;
+        return r;
+
+	//panic("serve_write not implemented");
 }
 
 // Stat ipc->stat.req_fileid.  Return the file's struct Stat to the

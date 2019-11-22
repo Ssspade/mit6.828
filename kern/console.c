@@ -50,7 +50,7 @@ delay(void)
 static bool serial_exists;
 
 static int
-serial_proc_data(void)
+serial_proc_data(void)//从串行端口读一个data
 {
 	if (!(inb(COM1+COM_LSR) & COM_LSR_DATA))
 		return -1;
@@ -318,7 +318,7 @@ static uint8_t *charcode[4] = {
  * Return -1 if no data.
  */
 static int
-kbd_proc_data(void)
+kbd_proc_data(void)//从键盘读入a character就返回，如果没输入就返回-1
 {
 	int c;
 	uint8_t stat, data;
@@ -401,7 +401,7 @@ static struct {
 // called by device interrupt routines to feed input characters
 // into the circular console input buffer.
 static void
-cons_intr(int (*proc)(void))
+cons_intr(int (*proc)(void))//将从键盘读入的一行填充到cons.buf
 {
 	int c;
 
