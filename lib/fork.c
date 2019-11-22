@@ -76,13 +76,13 @@ duppage(envid_t envid, unsigned pn)
 			panic("duppage sys_page_map:%e", r);
 	} else if (uvpt[pn] & (PTE_W|PTE_COW)) {
 		if ((r = sys_page_map(0, addr, envid, addr, PTE_COW|PTE_U|PTE_P)) < 0)
-			panic("sys_page_map COW:%e", r);
+			panic("sys_page_map COW:%e", r);//子进程标记
 
 		if ((r = sys_page_map(0, addr, 0, addr, PTE_COW|PTE_U|PTE_P)) < 0)
-			panic("sys_page_map COW:%e", r);
+			panic("sys_page_map COW:%e", r);//父进程标记
 	} else {
 		if ((r = sys_page_map(0, addr, envid, addr, PTE_U|PTE_P)) < 0)
-			panic("sys_page_map UP:%e", r);
+			panic("sys_page_map UP:%e", r);//简单映射
 	}
 	return 0;
 }
