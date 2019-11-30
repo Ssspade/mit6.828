@@ -11,18 +11,18 @@ static struct thread_queue thread_queue;
 static struct thread_queue kill_queue;
 
 void
-thread_init(void) {
+thread_init(void) {	//初始化线程
     threadq_init(&thread_queue);
     max_tid = 0;
 }
 
 uint32_t
-thread_id(void) {
+thread_id(void) {	//得到当前线程id
     return cur_tc->tc_tid;
 }
 
 void
-thread_wakeup(volatile uint32_t *addr) {
+thread_wakeup(volatile uint32_t *addr) {		//唤醒线程
     struct thread_context *tc = thread_queue.tq_first;
     while (tc) {
 	if (tc->tc_wait_addr == addr)
@@ -101,16 +101,16 @@ thread_entry(void) {
 int
 thread_create(thread_id_t *tid, const char *name, 
 		void (*entry)(uint32_t), uint32_t arg) {
-    struct thread_context *tc = malloc(sizeof(struct thread_context));
+    struct thread_context *tc = malloc(sizeof(struct thread_context));	//分配一个线程结构
     if (!tc)
 	return -E_NO_MEM;
 
     memset(tc, 0, sizeof(struct thread_context));
     
-    thread_set_name(tc, name);
-    tc->tc_tid = alloc_tid();
+    thread_set_name(tc, name);	//设置线程名
+    tc->tc_tid = alloc_tid();	//线程id
 
-    tc->tc_stack_bottom = malloc(stack_size);
+    tc->tc_stack_bottom = malloc(stack_size);	//每个线程应该有一个独立的栈，但是一个线程的线程内存是共享的，因为共用一个页表
     if (!tc->tc_stack_bottom) {
 	free(tc);
 	return -E_NO_MEM;
@@ -123,11 +123,11 @@ thread_create(thread_id_t *tid, const char *name,
     
     memset(&tc->tc_jb, 0, sizeof(tc->tc_jb));
     tc->tc_jb.jb_esp = (uint32_t)stacktop;
-    tc->tc_jb.jb_eip = (uint32_t)&thread_entry;
+    tc->tc_jb.jb_eip = (uint32_t)&thread_entry;	//线程代码入口
     tc->tc_entry = entry;
     tc->tc_arg = arg;
 
-    threadq_push(&thread_queue, tc);
+    threadq_push(&thread_queue, tc);	//将线程加入队列中
 
     if (tid)
 	*tid = tc->tc_tid;
@@ -158,6 +158,9 @@ thread_halt() {
     // when yield has no thread to run, it will return here!
     exit();
 }
+//该函数保存当前进程的寄存器信息到thread_context结构的tc_jb字段中，然后从链表中取下一个thread_context结构，
+//并将其tc_jb字段恢复到对应的寄存器中，继续执行。
+//jos_setjmp()和jos_longjmp()由汇编实现，因为要访问寄存器嘛。
 
 void
 thread_yield(void) {
@@ -167,13 +170,14 @@ thread_yield(void) {
 	return;
 
     if (cur_tc) {
-	if (jos_setjmp(&cur_tc->tc_jb) != 0)
+	if (jos_setjmp(&cur_tc->tc_jb) != 0)//保存当前线程的CPU状态到thread_context结构的tc_jb字段中。
+
 	    return;
 	threadq_push(&thread_queue, cur_tc);
     }
 
     cur_tc = next_tc;
-    jos_longjmp(&cur_tc->tc_jb, 1);
+    jos_longjmp(&cur_tc->tc_jb, 1);//将下一个线程对应的thread_context结构的tc_jb字段恢复到CPU继续执行
 }
 
 static void

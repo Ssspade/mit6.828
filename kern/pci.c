@@ -4,7 +4,7 @@
 #include <kern/pci.h>
 #include <kern/pcireg.h>
 #include <kern/e1000.h>
-
+//PCI代码将遍历PCI总线寻找设备
 // Flag to do "lspci" at bootup
 static int pci_show_devs = 1;
 static int pci_show_addrs = 0;
@@ -21,7 +21,7 @@ struct pci_driver {
 	uint32_t key1, key2;
 	int (*attachfn) (struct pci_func *pcif);
 };
-
+//如果匹配成功，PCI代码将调用该条目的attachfn来执行设备初始化。
 // pci_attach_class matches the class and subclass of a PCI device
 struct pci_driver pci_attach_class[] = {
 	{ PCI_CLASS_BRIDGE, PCI_SUBCLASS_BRIDGE_PCI, &pci_bridge_attach },
@@ -31,6 +31,8 @@ struct pci_driver pci_attach_class[] = {
 // pci_attach_vendor matches the vendor ID and device ID of a PCI device. key1
 // and key2 should be the vendor ID and device ID respectively
 struct pci_driver pci_attach_vendor[] = {
+	//lab6
+	{E1000_VENDER_ID_82540EM, E1000_DEVICE_ID_82540EM, &e1000_init},
 	{ 0, 0, 0 },
 };
 
@@ -40,10 +42,10 @@ pci_conf1_set_addr(uint32_t bus,
 		   uint32_t func,
 		   uint32_t offset)
 {
-	assert(bus < 256);
-	assert(dev < 32);
-	assert(func < 8);
-	assert(offset < 256);
+	assert(bus < 256);//8位 最多可以有256根PCI总线，一般主机上只会用到其中很少的几根
+	assert(dev < 32);//5位 一根PCI总线可以连接多个物理设备，可以是一个网卡、显卡或声卡等，最多不超过32个
+	assert(func < 8);//3位 一个PCI物理设备可以有多个功能，比如同时提供视频解析和声音解析，最多可提供8个功能。
+	assert(offset < 256);//8位 每个功能对应1个256字节的PCI配置空间。
 	assert((offset & 0x3) == 0);
 
 	uint32_t v = (1 << 31) |		// config-space

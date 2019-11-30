@@ -17,9 +17,9 @@ struct pci_func {
     uint32_t dev_id;
     uint32_t dev_class;
 
-    uint32_t reg_base[6];
-    uint32_t reg_size[6];
-    uint8_t irq_line;
+    uint32_t reg_base[6];//内存映射I/O的基地址
+    uint32_t reg_size[6];//对应的reg_base基值的字节大小或I/O端口数量
+    uint8_t irq_line;//包含分配给设备用于中断的IRQ lines
 };
 
 struct pci_bus {
