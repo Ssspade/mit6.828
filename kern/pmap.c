@@ -11,17 +11,17 @@
 #include <kern/env.h>
 
 // These variables are set by i386_detect_memory()
-size_t npages;			// Amount of physical memory (in pages)
-static size_t npages_basemem;	// Amount of base memory (in pages)
+size_t npages;			// Amount of physical memory (in pages)以页为单位的物理内存量
+static size_t npages_basemem;	// Amount of base memory (in pages)基础内存 
 
 // These variables are set in mem_init()
-pde_t *kern_pgdir;		// Kernel's initial page directory
-struct PageInfo *pages;		// Physical page state array
-static struct PageInfo *page_free_list;	// Free list of physical pages
+pde_t *kern_pgdir;		// Kernel's initial page directory内核的初始化页面目录
+struct PageInfo *pages;		// Physical page state array物理页面状态数组
+static struct PageInfo *page_free_list;	// Free list of physical pages空闲的物理页面表
 
 
 // --------------------------------------------------------------
-// Detect machine's physical memory setup.
+// Detect machine's physical memory setup.检测机器的物理内存设置
 // --------------------------------------------------------------
 
 static int
@@ -36,13 +36,14 @@ i386_detect_memory(void)
 	size_t basemem, extmem, ext16mem, totalmem;
 
 	// Use CMOS calls to measure available base & extended memory.
+	//使用CMOS调用来测量可用的基本和扩展内存
 	// (CMOS calls return results in kilobytes.)
 	basemem = nvram_read(NVRAM_BASELO);
 	extmem = nvram_read(NVRAM_EXTLO);
 	ext16mem = nvram_read(NVRAM_EXT16LO) * 64;
 
 	// Calculate the number of physical pages available in both base
-	// and extended memory.
+	// and extended memory.计算可用的物理内存
 	if (ext16mem)
 		totalmem = 16 * 1024 + ext16mem;
 	else if (extmem)
@@ -50,7 +51,7 @@ i386_detect_memory(void)
 	else
 		totalmem = basemem;
 
-	npages = totalmem / (PGSIZE / 1024);
+	npages = totalmem / (PGSIZE / 1024);//一共有多少个页表项
 	npages_basemem = basemem / (PGSIZE / 1024);
 
 	cprintf("Physical memory: %uK available, base = %uK, extended = %uK\n",
@@ -71,17 +72,17 @@ static void check_page(void);
 static void check_page_installed_pgdir(void);
 
 // This simple physical memory allocator is used only while JOS is setting
-// up its virtual memory system.  page_alloc() is the real allocator.
+// up its virtual memory system.  page_alloc() is the real allocator.真正分配器
 //
 // If n>0, allocates enough pages of contiguous physical memory to hold 'n'
 // bytes.  Doesn't initialize the memory.  Returns a kernel virtual address.
-//
+//如果n大于0，分配足够的连续物理内存，不初始化内存，返回内核虚拟地址
 // If n==0, returns the address of the next free page without allocating
 // anything.
-//
+//n=0，返回下一个页面的空闲地址，不分配
 // If we're out of memory, boot_alloc should panic.
 // This function may ONLY be used during initialization,
-// before the page_free_list list has been set up.
+// before the page_free_list list has been set up.此函数用于初始化
 static void *
 boot_alloc(uint32_t n)
 {
@@ -103,8 +104,12 @@ boot_alloc(uint32_t n)
 	// to a multiple of PGSIZE.
 	//
 	// LAB 2: Your code here.
-
-	return NULL;
+	if(n==0){
+		result = nextfree;
+	}
+	result = nextfree;
+	nextfree += ROUNDUP(n, PGSIZE);
+	return result;
 }
 
 // Set up a two-level page table:
@@ -126,7 +131,7 @@ mem_init(void)
 	i386_detect_memory();
 
 	// Remove this line when you're ready to test this function.
-	panic("mem_init: This function is not finished\n");
+	//panic("mem_init: This function is not finished\n");
 
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
@@ -138,7 +143,7 @@ mem_init(void)
 	// a virtual page table at virtual address UVPT.
 	// (For now, you don't have understand the greater purpose of the
 	// following line.)
-
+	//以递归方式将PD本身作为页表插入，以在虚拟地址UVPT处形成一个虚拟页表。
 	// Permissions: kernel R, user R
 	kern_pgdir[PDX(UVPT)] = PADDR(kern_pgdir) | PTE_U | PTE_P;
 
@@ -149,8 +154,8 @@ mem_init(void)
 	// array.  'npages' is the number of physical pages in memory.  Use memset
 	// to initialize all fields of each struct PageInfo to 0.
 	// Your code goes here:
-
-
+	pages = (struct PageInfo *)boot_alloc(npages*sizeof(struct PageInfo));
+	memset(pages, 0, npages*sizeof(struct PageInfo));
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
@@ -177,7 +182,7 @@ mem_init(void)
 	//      (ie. perm = PTE_U | PTE_P)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
-
+	boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U|PTE_P);
 	//////////////////////////////////////////////////////////////////////
 	// Map the 'envs' array read-only by the user at linear address UENVS
 	// (ie. perm = PTE_U | PTE_P).
@@ -197,7 +202,7 @@ mem_init(void)
 	//       overwrite memory.  Known as a "guard page".
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
-
+	boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W|PTE_P);
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
 	// Ie.  the VA range [KERNBASE, 2^32) should map to
@@ -206,7 +211,7 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
-
+	boot_map_region(kern_pgdir, KERNBASE, 0x100000000-KERNBASE,0, PTE_W|PTE_P);
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
 
@@ -248,27 +253,46 @@ void
 page_init(void)
 {
 	// The example code here marks all physical pages as free.
+	//此处的示例代码将所有物理页面标记为空闲。
 	// However this is not truly the case.  What memory is free?
-	//  1) Mark physical page 0 as in use.
+	//  1) Mark physical page 0 as in use.0被使用
 	//     This way we preserve the real-mode IDT and BIOS structures
 	//     in case we ever need them.  (Currently we don't, but...)
+	//我们就可以保留实模式IDT和BIOS结构，以备需要时使用。
 	//  2) The rest of base memory, [PGSIZE, npages_basemem * PGSIZE)
-	//     is free.
+	//     is free.剩余的基本内存是空闲的
 	//  3) Then comes the IO hole [IOPHYSMEM, EXTPHYSMEM), which must
-	//     never be allocated.
+	//     never be allocated.有个IO不能分配
 	//  4) Then extended memory [EXTPHYSMEM, ...).
 	//     Some of it is in use, some is free. Where is the kernel
 	//     in physical memory?  Which pages are already in use for
 	//     page tables and other data structures?
-	//
+	//然后扩展内存[EXTPHYSMEM，...）。
+	//其中一些正在使用中，有些是免费的。物理内存中的内核在哪里？页面表和其他数据结构已经使用了哪些页面？
 	// Change the code to reflect this.
 	// NB: DO NOT actually touch the physical memory corresponding to
 	// free pages!
 	size_t i;
-	for (i = 0; i < npages; i++) {
-		pages[i].pp_ref = 0;
-		pages[i].pp_link = page_free_list;
-		page_free_list = &pages[i];
+	//for (i = 0; i < npages; i++) {
+		//pages[i].pp_ref = 0;
+		//pages[i].pp_link = page_free_list;
+		//page_free_list = &pages[i];
+	//}
+	char *nextfree = boot_alloc(0);
+	size_t kern_end = PGNUM(PADDR(nextfree));
+	for(i=0; i<npages; i++){
+		if(i==0){
+			pages[i].pp_ref = 1;
+		}else if(i*PGSIZE>=IOPHYSMEM && i*PGSIZE<=EXTPHYSMEM){
+			pages[i].pp_ref = 1;
+		}else if(i*PGSIZE>=EXTPHYSMEM && i<=kern_end){
+			pages[i].pp_ref = 1;
+		}else{
+			pages[i].pp_ref = 0;
+			pages[i].pp_link = page_free_list;
+			page_free_list = &pages[i];
+		}
+		
 	}
 }
 
@@ -288,7 +312,18 @@ struct PageInfo *
 page_alloc(int alloc_flags)
 {
 	// Fill this function in
-	return 0;
+	struct PageInfo *alloc_page = page_free_list;
+	if(alloc_page==NULL){
+		return NULL;
+	}
+	if(alloc_flags & ALLOC_ZERO){
+		memset(page2kva(alloc_page), 0,PGSIZE );
+	}
+	
+	page_free_list =alloc_page->pp_link;
+	alloc_page->pp_link = NULL;
+	//alloc_page->pp_ref = 1;
+	return alloc_page;
 }
 
 //
@@ -301,6 +336,12 @@ page_free(struct PageInfo *pp)
 	// Fill this function in
 	// Hint: You may want to panic if pp->pp_ref is nonzero or
 	// pp->pp_link is not NULL.
+	if(pp->pp_ref!=0 || pp->pp_link!=NULL){
+		panic("check alloc page");
+		return;
+	}
+	pp->pp_link = page_free_list;
+	page_free_list = pp;
 }
 
 //
@@ -339,8 +380,33 @@ page_decref(struct PageInfo* pp)
 pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
-	// Fill this function in
-	return NULL;
+	uint32_t pdx = PDX(va);   // 页目录项索引
+	uint32_t ptx = PTX(va);   // 页表项索引
+	pte_t   *pde;             // 页目录项指针
+	pte_t   *pte;             // 页表项指针
+	struct PageInfo *pp;
+	pde = &pgdir[pdx];        //获取页目录项
+	
+	if (!(*pde & PTE_P)){
+		// 二级页表不存在，
+		if (!create) {
+			return NULL;
+		}
+		// 获取一页的内存，创建一个新的页表，来存放页表项
+		if(!(pp = page_alloc(ALLOC_ZERO))) {  
+            		return NULL;
+        }
+		pte = (pte_t *)page2kva(pp);
+		pp->pp_ref++; 
+		*pde = page2pa(pp)|PTE_P|PTE_W|PTE_U;
+		//*pde = PADDR(pte) | (PTE_P | PTE_W | PTE_U);  // 设置页目录项
+	}else {
+		// 二级页表有效
+		// PTE_ADDR得到物理地址，KADDR转为虚拟地址
+		pte = (KADDR(PTE_ADDR(*pde)));
+	}
+	 // 返回页表项的虚拟地址
+	return &pte[ptx];                              
 }
 
 //
@@ -348,7 +414,8 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 // in the page table rooted at pgdir.  Size is a multiple of PGSIZE, and
 // va and pa are both page-aligned.
 // Use permission bits perm|PTE_P for the entries.
-//
+// 把虚拟地址 [va, va+size)映射到物理地址[pa, pa+size)
+// 找到虚拟地址对应的页面，将物理地址写入页表
 // This function is only intended to set up the ``static'' mappings
 // above UTOP. As such, it should *not* change the pp_ref field on the
 // mapped pages.
@@ -357,18 +424,26 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
-	// Fill this function in
+	size_t i=0;
+	for(i=0; i*PGSIZE< size; i++){
+		pte_t *pte = pgdir_walk(pgdir, (void *)va, 1);
+		*pte = pa|perm|PTE_P;
+		va+=PGSIZE;
+		pa+=PGSIZE;
+	}
 }
 
 //
 // Map the physical page 'pp' at virtual address 'va'.
+//把虚拟地址的情况映射到物理页面信息pp中。
 // The permissions (the low 12 bits) of the page table entry
 // should be set to 'perm|PTE_P'.
 //
 // Requirements
 //   - If there is already a page mapped at 'va', it should be page_remove()d.
+//   已经有一个页映射到va，就删除
 //   - If necessary, on demand, a page table should be allocated and inserted
-//     into 'pgdir'.
+//     into 'pgdir'.若需要，页表被分配并插入到页表项中
 //   - pp->pp_ref should be incremented if the insertion succeeds.
 //   - The TLB must be invalidated if a page was formerly present at 'va'.
 //
@@ -388,7 +463,17 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 int
 page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
-	// Fill this function in
+	
+	pte_t *pte = pgdir_walk(pgdir, va,1);
+	if(!pte)
+		return -E_NO_MEM;
+	//若va对应的页面存在
+	pp->pp_ref++;
+	if(*pte & PTE_P){
+		page_remove(pgdir, va);
+	}
+	//not 
+	*pte = page2pa(pp)|perm|PTE_P;
 	return 0;
 }
 
@@ -398,7 +483,7 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 // of the pte for this page.  This is used by page_remove and
 // can be used to verify page permissions for syscall arguments,
 // but should not be used by most callers.
-//
+////查找虚拟地址va对应的页表项，返回页表项内保存的物理页在PageInfo结构体中的索引值
 // Return NULL if there is no page mapped at va.
 //
 // Hint: the TA solution uses pgdir_walk and pa2page.
@@ -406,8 +491,13 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 struct PageInfo *
 page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
-	// Fill this function in
-	return NULL;
+	pte_t *pte = pgdir_walk(pgdir, va, 0);
+	if(!pte||!(*pte & PTE_P))
+		return NULL;
+	if(pte_store != 0)
+		*pte_store = pte;//why,used by remove
+	
+	return pa2page(PTE_ADDR(*pte));
 }
 
 //
@@ -415,12 +505,12 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 // If there is no physical page at that address, silently does nothing.
 //
 // Details:
-//   - The ref count on the physical page should decrement.
+//   - The ref count on the physical page should decrement.ref递减
 //   - The physical page should be freed if the refcount reaches 0.
-//   - The pg table entry corresponding to 'va' should be set to 0.
+//   - The pg table entry corresponding to 'va' should be set to 0.va为0
 //     (if such a PTE exists)
 //   - The TLB must be invalidated if you remove an entry from
-//     the page table.
+//     the page table.TLB 翻译缓存 必须变为不可用状态如果移除了页表入口
 //
 // Hint: The TA solution is implemented using page_lookup,
 // 	tlb_invalidate, and page_decref.
@@ -428,7 +518,15 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 void
 page_remove(pde_t *pgdir, void *va)
 {
-	// Fill this function in
+	
+	pte_t *pte;
+	struct PageInfo *pp = page_lookup(pgdir, va, &pte);//find infopage
+	if(pp){
+		page_decref(pp);
+		*pte = 0;
+		tlb_invalidate(pgdir, va);
+		//cprintf("wrong");
+	}
 }
 
 //

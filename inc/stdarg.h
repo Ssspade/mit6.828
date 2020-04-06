@@ -1,4 +1,4 @@
-/*	$NetBSD: stdarg.h,v 1.12 1995/12/25 23:15:31 mycroft Exp $	*/
+/*	$NetBSD: stdarg.h,v 1.12 2020/03/25 23:15:31 mycroft Exp $	*/
 
 #ifndef JOS_INC_STDARG_H
 #define	JOS_INC_STDARG_H
