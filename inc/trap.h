@@ -73,8 +73,8 @@ struct Trapframe {
 	uint16_t tf_ss;
 	uint16_t tf_padding4;
 } __attribute__((packed));
-
-
+//__attribute__((packed));告诉编译器取消结构在编译过程中的优化对齐,按照实际占用字节数进行对齐
+//__attribute__关键字主要是用来在函数或数据声明中设置其属性
 #endif /* !__ASSEMBLER__ */
 
 #endif /* !JOS_INC_TRAP_H */
