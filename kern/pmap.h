@@ -12,7 +12,7 @@ struct Env;
 
 extern char bootstacktop[], bootstack[];
 
-extern struct PageInfo *pages;
+extern struct PageInfo *pages;//页表结构
 extern size_t npages;
 
 extern pde_t *kern_pgdir;
@@ -24,7 +24,7 @@ extern pde_t *kern_pgdir;
  * non-kernel virtual address.
  */
 #define PADDR(kva) _paddr(__FILE__, __LINE__, kva)
-
+//返回内核映射的物理地址
 static inline physaddr_t
 _paddr(const char *file, int line, void *kva)
 {
@@ -36,7 +36,7 @@ _paddr(const char *file, int line, void *kva)
 /* This macro takes a physical address and returns the corresponding kernel
  * virtual address.  It panics if you pass an invalid physical address. */
 #define KADDR(pa) _kaddr(__FILE__, __LINE__, pa)
-
+//返回内核映射的虚拟地址
 static inline void*
 _kaddr(const char *file, int line, physaddr_t pa)
 {
@@ -63,17 +63,23 @@ void	page_decref(struct PageInfo *pp);
 
 void	tlb_invalidate(pde_t *pgdir, void *va);
 
+//<<<<<<< HEAD
 void *	mmio_map_region(physaddr_t pa, size_t size);
+//=======
+//>>>>>>> lab3
 
 int	user_mem_check(struct Env *env, const void *va, size_t len, int perm);
 void	user_mem_assert(struct Env *env, const void *va, size_t len, int perm);
+
+
+//将INFO结构映射到物理地址
 
 static inline physaddr_t
 page2pa(struct PageInfo *pp)
 {
 	return (pp - pages) << PGSHIFT;
 }
-
+//物理地址转换为info结构地址
 static inline struct PageInfo*
 pa2page(physaddr_t pa)
 {
@@ -81,7 +87,7 @@ pa2page(physaddr_t pa)
 		panic("pa2page called with invalid pa");
 	return &pages[PGNUM(pa)];
 }
-
+//info结构地址转换为虚拟地址
 static inline void*
 page2kva(struct PageInfo *pp)
 {

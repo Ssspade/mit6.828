@@ -13,7 +13,7 @@
 static void cons_intr(int (*proc)(void));
 static void cons_putc(int c);
 
-// Stupid I/O delay routine necessitated by historical PC design flaws
+// Stupid I/O delay routine necessitated by historical PC design flaws输入输出延迟程序是由历史上的个人电脑设计缺陷造成
 static void
 delay(void)
 {
@@ -160,14 +160,15 @@ cga_init(void)
 }
 
 
-
+//int c 32位，高16位表属性，底16位表字符
 static void
 cga_putc(int c)
 {
 	// if no attribute given, then use black on white
 	if (!(c & ~0xFF))
 		c |= 0x0700;
-
+	//c & 0xff去掉属性只看字符
+	//c |= 0x0700设为默认属性
 	switch (c & 0xff) {
 	case '\b':
 		if (crt_pos > 0) {
@@ -194,16 +195,19 @@ cga_putc(int c)
 	}
 
 	// What is the purpose of this?
+	//一页写满，滚动一行
 	if (crt_pos >= CRT_SIZE) {
 		int i;
-
+	//把1-n行的内容复制到0-（n-1）行，第n行不变
 		memmove(crt_buf, crt_buf + CRT_COLS, (CRT_SIZE - CRT_COLS) * sizeof(uint16_t));
+	//将第n行覆盖为空格
 		for (i = CRT_SIZE - CRT_COLS; i < CRT_SIZE; i++)
 			crt_buf[i] = 0x0700 | ' ';
+	//清空最后一行，同步crt_pos
 		crt_pos -= CRT_COLS;
 	}
 
-	/* move that little blinky thing */
+	/* move that little blinky thing移动那个小东西 */
 	outb(addr_6845, 14);
 	outb(addr_6845 + 1, crt_pos >> 8);
 	outb(addr_6845, 15);

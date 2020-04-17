@@ -47,10 +47,41 @@
 /*
  * Lab 3: Your code here for generating entry points for the different traps.
  */
+TRAPHANDLER_NOEC(handler_divide,T_DIVIDE );//0
+TRAPHANDLER_NOEC(handler_debug, T_DEBUG);
+TRAPHANDLER_NOEC(handler_nmi, T_NMI);
+TRAPHANDLER_NOEC(handler_brkpt, T_BRKPT);
+TRAPHANDLER_NOEC(handler_oflow, T_OFLOW);
+TRAPHANDLER_NOEC(handler_bound, T_BOUND);
+TRAPHANDLER_NOEC(handler_illop, T_ILLOP);
+TRAPHANDLER_NOEC(handler_device, T_DEVICE);
+TRAPHANDLER(handler_dblflt, T_DBLFLT);//8
+TRAPHANDLER(handler_tss, T_TSS);//10
+TRAPHANDLER(handler_segnp, T_SEGNP);//11
+TRAPHANDLER(handler_stack, T_STACK);//12
+TRAPHANDLER(handler_gpflt, T_GPFLT);//13
+TRAPHANDLER(handler_pgflt, T_PGFLT);//14
+TRAPHANDLER_NOEC(handler_fperr, T_FPERR);
+TRAPHANDLER_NOEC(handler_align, T_ALIGN);
+TRAPHANDLER_NOEC(handler_mchk, T_MCHK);
+TRAPHANDLER_NOEC(handler_simderr, T_SIMDERR);
 
-
-
+TRAPHANDLER_NOEC(handler_syscall, T_SYSCALL);//48
 /*
  * Lab 3: Your code here for _alltraps
  */
-
+_alltraps:
+	pushl %ds;
+	pushl %es;
+	pushal;
+	//load GD_KD into %ds and %es
+	movl $GD_KD, %eax;
+	movl %eax, %ds;
+	movl %eax, %es;
+	//pushl %esp to pass a pointer to the Trapframe as an argument to trap()
+	pushl %esp;
+	//call trap
+	call trap;
+	
+	
+	
