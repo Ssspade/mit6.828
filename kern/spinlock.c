@@ -35,7 +35,6 @@ get_caller_pcs(uint32_t pcs[])
 		pcs[i] = 0;
 }
 
-// Check whether this CPU is holding the lock.
 static int
 holding(struct spinlock *lock)
 {
@@ -53,10 +52,6 @@ __spin_initlock(struct spinlock *lk, char *name)
 #endif
 }
 
-// Acquire the lock.
-// Loops (spins) until the lock is acquired.
-// Holding a lock for a long time may cause
-// other CPUs to waste time spinning to acquire it.
 void
 spin_lock(struct spinlock *lk)
 {
@@ -65,13 +60,9 @@ spin_lock(struct spinlock *lk)
 		panic("CPU %d cannot acquire %s: already holding", cpunum(), lk->name);
 #endif
 
-	// The xchg is atomic.
-	// It also serializes, so that reads after acquire are not
-	// reordered before it. 
 	while (xchg(&lk->locked, 1) != 0)
 		asm volatile ("pause");
 
-	// Record info about lock acquisition for debugging.
 #ifdef DEBUG_SPINLOCK
 	lk->cpu = thiscpu;
 	get_caller_pcs(lk->pcs);
@@ -107,10 +98,5 @@ spin_unlock(struct spinlock *lk)
 	lk->cpu = 0;
 #endif
 
-	// The xchg instruction is atomic (i.e. uses the "lock" prefix) with
-	// respect to any other instruction which references the same memory.
-	// x86 CPUs will not reorder loads/stores across locked instructions
-	// (vol 3, 8.2.2). Because xchg() is implemented using asm volatile,
-	// gcc will not reorder C statements across the xchg.
 	xchg(&lk->locked, 0);
 }

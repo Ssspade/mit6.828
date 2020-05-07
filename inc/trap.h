@@ -31,7 +31,7 @@
 
 #define IRQ_OFFSET	32	// IRQ 0 corresponds to int IRQ_OFFSET
 
-// Hardware IRQ numbers. We receive these as (IRQ_OFFSET+IRQ_WHATEVER)
+// 外部中断
 #define IRQ_TIMER        0
 #define IRQ_KBD          1
 #define IRQ_SERIAL       4
@@ -73,7 +73,7 @@ struct Trapframe {
 	uint16_t tf_ss;
 	uint16_t tf_padding4;
 } __attribute__((packed));
-//<<<<<<< HEAD
+
 
 struct UTrapframe {
 	/* information about the fault */

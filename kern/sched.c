@@ -7,36 +7,33 @@
 
 void sched_halt(void);
 
-// Choose a user environment to run and run it.
+//轮转调度
 void
 sched_yield(void)
 {
 	struct Env *idle;
 
-	// Implement simple round-robin scheduling.
-	//
-	// Search through 'envs' for an ENV_RUNNABLE environment in
-	// circular fashion starting just after the env this CPU was
-	// last running.  Switch to the first such environment found.
-	//
-	// If no envs are runnable, but the environment previously
-	// running on this CPU is still ENV_RUNNING, it's okay to
-	// choose that environment.
-	//
-	// Never choose an environment that's currently running on
-	// another CPU (env_status == ENV_RUNNING). If there are
-	// no runnable environments, simply drop through to the code
-	// below to halt the cpu.
+	size_t i;
+	idle = curenv;
+	int start_envx = idle ? ENVX(idle->env_id)+1 : 0;
 
-	// LAB 4: Your code here.
-
+	for (i = 0; i < NENV; i++) {
+		int next_envx = (start_envx + i) % NENV;
+		if (envs[next_envx].env_status == ENV_RUNNABLE) {
+			env_run(&envs[next_envx]);
+		}
+	}
+	//时间片递增
+	//idle->env_runs ++;
+	//
+	if (idle && idle->env_status == ENV_RUNNING) {
+		env_run(idle);
+	}
 	// sched_halt never returns
 	sched_halt();
 }
 
-// Halt this CPU when there is nothing to do. Wait until the
-// timer interrupt wakes it up. This function never returns.
-//
+// 当无事可做时停止此CPU。等到定时器中断唤醒它。此函数永不返回。
 void
 sched_halt(void)
 {
@@ -75,7 +72,7 @@ sched_halt(void)
 		"pushl $0\n"
 		"pushl $0\n"
 		// Uncomment the following line after completing exercise 13
-		//"sti\n"
+		"sti\n"
 		"1:\n"
 		"hlt\n"
 		"jmp 1b\n"

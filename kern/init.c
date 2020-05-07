@@ -21,30 +21,20 @@ static void boot_aps(void);
 void
 i386_init(void)
 {
-	// Initialize the console.
-	// Can't call cprintf until after we do this!
+
 	cons_init();
-
 	cprintf("6828 decimal is %o octal!\n", 6828);
-
-	// Lab 2 memory management initialization functions
+	
 	mem_init();
-
-	// Lab 3 user environment initialization functions
+	
 	env_init();
 	trap_init();
 
-	// Lab 4 multiprocessor initialization functions
 	mp_init();
 	lapic_init();
-
-	// Lab 4 multitasking initialization functions
 	pic_init();
 
-	// Acquire the big kernel lock before waking up APs
-	// Your code here:
-
-	// Starting non-boot CPUs
+	lock_kernel();
 	boot_aps();
 
 #if defined(TEST)
@@ -52,7 +42,10 @@ i386_init(void)
 	ENV_CREATE(TEST, ENV_TYPE_USER);
 #else
 	// Touch all you want.
-	ENV_CREATE(user_primes, ENV_TYPE_USER);
+	//ENV_CREATE(user_hello, ENV_TYPE_USER);
+	ENV_CREATE(user_yield, ENV_TYPE_USER);
+	ENV_CREATE(user_yield, ENV_TYPE_USER);
+	ENV_CREATE(user_yield, ENV_TYPE_USER);
 #endif // TEST*
 
 	// Schedule and run the first user environment!
@@ -72,7 +65,7 @@ boot_aps(void)
 	void *code;
 	struct CpuInfo *c;
 
-	// Write entry code to unused memory at MPENTRY_PADDR
+	// 将进入代码复制在0x7000处
 	code = KADDR(MPENTRY_PADDR);
 	memmove(code, mpentry_start, mpentry_end - mpentry_start);
 
@@ -109,7 +102,8 @@ mp_main(void)
 	// only one CPU can enter the scheduler at a time!
 	//
 	// Your code here:
-
+	lock_kernel();
+	sched_yield();
 	// Remove this after you finish Exercise 6
 	for (;;);
 }

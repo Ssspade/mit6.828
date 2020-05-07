@@ -55,31 +55,25 @@ lapicw(int index, int value)
 void
 lapic_init(void)
 {
-	if (!lapicaddr)
+	if (!lapicaddr)// lapicaddr是APIC的物理地址，此时已经开启了分页机制
 		return;
 
-	// lapicaddr is the physical address of the LAPIC's 4K MMIO
-	// region.  Map it in to virtual memory so we can access it.
+	// lapicaddr是LAPIC的4K MMIO区域的物理地址。
+	// 把它映射到虚拟内存以便我们可以访问它
 	lapic = mmio_map_region(lapicaddr, 4096);
 
-	// Enable local APIC; set spurious interrupt vector.
+	// 使用SVR来打开APIC 还可以使用global enable/disable APIC
 	lapicw(SVR, ENABLE | (IRQ_OFFSET + IRQ_SPURIOUS));
 
-	// The timer repeatedly counts down at bus frequency
-	// from lapic[TICR] and then issues an interrupt.  
-	// If we cared more about precise timekeeping,
-	// TICR would be calibrated using an external time source.
+	// 设置时钟频率
 	lapicw(TDCR, X1);
+	// 设置定期计数模式
 	lapicw(TIMER, PERIODIC | (IRQ_OFFSET + IRQ_TIMER));
+	// 写入initial-count值 为0时产生中断
+	// 为零后会重新装入再次计数
 	lapicw(TICR, 10000000); 
 
-	// Leave LINT0 of the BSP enabled so that it can get
-	// interrupts from the 8259A chip.
-	//
-	// According to Intel MP Specification, the BIOS should initialize
-	// BSP's local APIC in Virtual Wire Mode, in which 8259A's
-	// INTR is virtually connected to BSP's LINTIN0. In this mode,
-	// we do not need to program the IOAPIC.
+	// 如果当前CPU不是BSP 那么屏蔽来自8259 PIC的中断请求
 	if (thiscpu != bootcpu)
 		lapicw(LINT0, MASKED);
 
@@ -107,7 +101,7 @@ lapic_init(void)
 	while(lapic[ICRLO] & DELIVS)
 		;
 
-	// Enable interrupts on the APIC (but not on the processor).
+	// 允许响应所有的中断请求
 	lapicw(TPR, 0);
 }
 
@@ -124,7 +118,7 @@ void
 lapic_eoi(void)
 {
 	if (lapic)
-		lapicw(EOI, 0);
+		lapicw(EOI, 0);//响应中断，即向EOI寄存器发送0
 }
 
 // Spin for a given number of microseconds.
