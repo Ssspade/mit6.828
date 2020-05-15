@@ -206,7 +206,8 @@ read(int fdnum, void *buf, size_t n)
 	int r;
 	struct Dev *dev;
 	struct Fd *fd;
-
+	//根据fdnum找到一个Fd页面，里面保存一个openfile的基本信息
+	//根据fd的devid找到对应设备dev
 	if ((r = fd_lookup(fdnum, &fd)) < 0
 	    || (r = dev_lookup(fd->fd_dev_id, &dev)) < 0)
 		return r;
@@ -216,6 +217,7 @@ read(int fdnum, void *buf, size_t n)
 	}
 	if (!dev->dev_read)
 		return -E_NOT_SUPP;
+	//返回读到的字节总数
 	return (*dev->dev_read)(fd, buf, n);
 }
 

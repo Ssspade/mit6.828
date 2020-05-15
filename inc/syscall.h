@@ -17,6 +17,8 @@ enum {
 	SYS_yield,
 	SYS_ipc_try_send,
 	SYS_ipc_recv,
+//-------------add alarm-----------
+	//SYS_alarm,
 	NSYSCALLS
 };
 

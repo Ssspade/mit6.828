@@ -12,6 +12,7 @@ union Fsipc fsipcbuf __attribute__((aligned(PGSIZE)));
 // type: request code, passed as the simple integer IPC value.
 // dstva: virtual address at which to receive reply page, 0 if none.
 // Returns result from the file server.
+// 负责跟文件系统server进程间通信，向文件服务端发送请求
 static int
 fsipc(unsigned type, void *dstva)
 {
@@ -25,6 +26,7 @@ fsipc(unsigned type, void *dstva)
 		cprintf("[%08x] fsipc %d %08x\n", thisenv->env_id, type, *(uint32_t *)&fsipcbuf);
 
 	ipc_send(fsenv, type, &fsipcbuf, PTE_P | PTE_W | PTE_U);
+	// 要在其中接收回复页的虚拟地址
 	return ipc_recv(NULL, dstva, NULL);
 }
 
@@ -103,45 +105,39 @@ devfile_flush(struct Fd *fd)
 	return fsipc(FSREQ_FLUSH, NULL);
 }
 
-// Read at most 'n' bytes from 'fd' at the current position into 'buf'.
-//
-// Returns:
-// 	The number of bytes successfully read.
-// 	< 0 on error.
 static ssize_t
 devfile_read(struct Fd *fd, void *buf, size_t n)
 {
-	// Make an FSREQ_READ request to the file system server after
-	// filling fsipcbuf.read with the request arguments.  The
-	// bytes read will be written back to fsipcbuf by the file
-	// system server.
 	int r;
-
+	// 设置好fsipcbuf的参数，调用fsipc去向服务器端发送read请求
 	fsipcbuf.read.req_fileid = fd->fd_file.id;
 	fsipcbuf.read.req_n = n;
 	if ((r = fsipc(FSREQ_READ, NULL)) < 0)
 		return r;
 	assert(r <= n);
 	assert(r <= PGSIZE);
+	// 请求成功后结果也是保存在共享页面fsipcbuf中
 	memmove(buf, fsipcbuf.readRet.ret_buf, r);
 	return r;
 }
 
 
-// Write at most 'n' bytes from 'buf' to 'fd' at the current seek position.
-//
-// Returns:
-//	 The number of bytes successfully written.
-//	 < 0 on error.
+// 在当前搜寻位置将最多'n'个字节从'buf'写入'fd'
 static ssize_t
 devfile_write(struct Fd *fd, const void *buf, size_t n)
 {
-	// Make an FSREQ_WRITE request to the file system server.  Be
-	// careful: fsipcbuf.write.req_buf is only so large, but
-	// remember that write is always allowed to write *fewer*
-	// bytes than requested.
-	// LAB 5: Your code here
-	panic("devfile_write not implemented");
+	int r;
+	int bufsize = sizeof(fsipcbuf.write.req_buf);
+	n = MIN(bufsize, n);  
+	memmove(fsipcbuf.write.req_buf, buf, n);//写入
+	fsipcbuf.write.req_fileid = fd->fd_file.id;
+	fsipcbuf.write.req_n = n;
+	r = fsipc(FSREQ_WRITE, NULL);
+	if (r < 0)
+		return r;
+	assert(r <= n);
+	assert(r <= bufsize);
+	return r;
 }
 
 static int

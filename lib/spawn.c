@@ -297,11 +297,18 @@ map_segment(envid_t child, uintptr_t va, size_t memsz,
 	return 0;
 }
 
-// Copy the mappings for shared pages into the child address space.
+// 将共享页面的映射复制到子地址空间。
 static int
 copy_shared_pages(envid_t child)
 {
-	// LAB 5: Your code here.
+	int r,i;
+	for (i = 0; i < PGNUM(USTACKTOP); i ++){ 
+	// uvpd、uvpt应该是个全局数组变量，但是数组元素对应的pde、pte具体是什么应该取决于lcr3设置的是哪个环境的内存空间
+		if((uvpd[i/1024] & PTE_P) && (uvpt[i] & PTE_P) && (uvpt[i] & PTE_SHARE)){ //i跟pte一一对应，而i/1024就是该pte所在的页表
+			if ((r = sys_page_map(0, PGADDR(i/1024, i%1024, 0), child,PGADDR(i/1024, i%1024, 0), uvpt[i] & PTE_SYSCALL)) < 0)
+				return r;
+		}
+	}
 	return 0;
 }
 

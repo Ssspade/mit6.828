@@ -6,35 +6,32 @@
 #include <inc/types.h>
 #include <inc/mmu.h>
 
-// File nodes (both in-memory and on-disk)
-
-// Bytes per file system block - same as page size
+// 块大小
 #define BLKSIZE		PGSIZE
 #define BLKBITSIZE	(BLKSIZE * 8)
 
-// Maximum size of a filename (a single path component), including null
-// Must be a multiple of 4
+// 文件名的最大长度
+// x4
 #define MAXNAMELEN	128
 
-// Maximum size of a complete pathname, including null
+// 路径的最大长度
 #define MAXPATHLEN	1024
 
-// Number of block pointers in a File descriptor
+// 直接块
 #define NDIRECT		10
-// Number of direct block pointers in an indirect block
+// 间接块
 #define NINDIRECT	(BLKSIZE / 4)
 
 #define MAXFILESIZE	((NDIRECT + NINDIRECT) * BLKSIZE)
-
+//既可以表示普通文件也可以表示目录
 struct File {
-	char f_name[MAXNAMELEN];	// filename
-	off_t f_size;			// file size in bytes
-	uint32_t f_type;		// file type
+	char f_name[MAXNAMELEN];	// 文件名
+	off_t f_size;			// 文件大小
+	uint32_t f_type;		// 文件类型
 
-	// Block pointers.
-	// A block is allocated iff its value is != 0.
-	uint32_t f_direct[NDIRECT];	// direct blocks
-	uint32_t f_indirect;		// indirect block
+	// 块  允许文件最多1034块
+	uint32_t f_direct[NDIRECT];	// 直接块 10*4096b=40kb
+	uint32_t f_indirect;		// 间接块 4096/4 = 1024个块号
 
 	// Pad out to 256 bytes; must do arithmetic in case we're compiling
 	// fsformat on a 64-bit machine.
@@ -44,35 +41,36 @@ struct File {
 // An inode block contains exactly BLKFILES 'struct File's
 #define BLKFILES	(BLKSIZE / sizeof(struct File))
 
-// File types
-#define FTYPE_REG	0	// Regular file
-#define FTYPE_DIR	1	// Directory
+// 文件类型
+#define FTYPE_REG	0	// 普通文件
+#define FTYPE_DIR	1	// 目录
 
 
-// File system super-block (both in-memory and on-disk)
+// super-block 
 
 #define FS_MAGIC	0x4A0530AE	// related vaguely to 'J\0S!'
 
 struct Super {
 	uint32_t s_magic;		// Magic number: FS_MAGIC
-	uint32_t s_nblocks;		// Total number of blocks on disk
-	struct File s_root;		// Root directory node
+	uint32_t s_nblocks;		// 块数目
+	struct File s_root;		// 保存文件系统根目录的元数据
 };
 
-// Definitions for requests from clients to file system
+// 客户端对文件系统的请求的定义
 enum {
 	FSREQ_OPEN = 1,
 	FSREQ_SET_SIZE,
-	// Read returns a Fsret_read on the request page
+	// Read在请求页面上返回Fsret_read
 	FSREQ_READ,
 	FSREQ_WRITE,
-	// Stat returns a Fsret_stat on the request page
+	// Stat在请求页面上返回Fsret_stat
 	FSREQ_STAT,
 	FSREQ_FLUSH,
 	FSREQ_REMOVE,
 	FSREQ_SYNC
 };
 
+// 文件系统ipc设计
 union Fsipc {
 	struct Fsreq_open {
 		char req_path[MAXPATHLEN];

@@ -9,12 +9,14 @@
 #include <inc/error.h>
 
 /*
- * Space or zero padding and a field width are supported for the numeric
+ * Space or zero padding and a field width are supported for the numeric数字支持空格或零填充和字段宽度
  * formats only.
  *
  * The special format %e takes an integer error code
  * and prints a string describing the error.
+ *特殊格式%e采用整数错误代码，并打印描述错误的字符串。
  * The integer may be positive or negative,
+ * 整数可以是正的或负的，
  * so that -E_NO_MEM and E_NO_MEM are equivalent.
  */
 
@@ -40,26 +42,31 @@ static const char * const error_string[MAXERROR] =
 /*
  * Print a number (base <= 16) in reverse order,
  * using specified putch function and associated pointer putdat.
+ * 使用指定的putch函数和相关的指针putdat
+ * 以相反的顺序打印一个数字(基数< = 16)。
  */
 static void
 printnum(void (*putch)(int, void*), void *putdat,
 	 unsigned long long num, unsigned base, int width, int padc)
 {
 	// first recursively print all preceding (more significant) digits
+	//首先递归打印所有前面的(更重要的)数字
 	if (num >= base) {
 		printnum(putch, putdat, num / base, base, width - 1, padc);
 	} else {
-		// print any needed pad characters before first digit
+		// print any needed pad characters before first digit在第一个数字前打印任何需要的填充字符
 		while (--width > 0)
 			putch(padc, putdat);
 	}
 
 	// then print this (the least significant) digit
+	//然后打印这个(最低有效)数字
 	putch("0123456789abcdef"[num % base], putdat);
 }
 
-// Get an unsigned int of various possible sizes from a varargs list,
-// depending on the lflag parameter.
+// Get an unsigned int of various possible sizes from a varargs list,从变量列表中获取各种可能大小的无符号整数，
+// depending on the lflag parameter.取决于lflag参数。
+//type va_arg解析参数,ap指变参表中位置，要获得参数制定类型
 static unsigned long long
 getuint(va_list *ap, int lflag)
 {
@@ -86,12 +93,13 @@ getint(va_list *ap, int lflag)
 
 
 // Main function to format and print a string.
+// 格式化和打印字符串的主要功能。
 void printfmt(void (*putch)(int, void*), void *putdat, const char *fmt, ...);
 
 void
 vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 {
-	register const char *p;
+	register const char *p;//静态寄存器字符指针
 	register int ch, err;
 	unsigned long long num;
 	int base, lflag, width, precision, altflag;
@@ -105,6 +113,7 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 		}
 
 		// Process a %-escape sequence
+		// 处理一个%转义序列
 		padc = ' ';
 		width = -1;
 		precision = -1;
@@ -119,6 +128,7 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 			goto reswitch;
 
 		// flag to pad with 0's instead of spaces
+		//用0代替空格来填充标志
 		case '0':
 			padc = '0';
 			goto reswitch;
@@ -215,10 +225,9 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 		// (unsigned) octal
 		case 'o':
 			// Replace this with your code.
-			putch('X', putdat);
-			putch('X', putdat);
-			putch('X', putdat);
-			break;
+			num = getuint(&ap, lflag);
+			base = 8;
+			goto number;
 
 		// pointer
 		case 'p':

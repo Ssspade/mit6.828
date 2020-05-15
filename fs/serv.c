@@ -11,43 +11,36 @@
 
 #define debug 0
 
-// The file system server maintains three structures
-// for each open file.
+/// 文件系统服务器为每个打开的文件维护三个结构。
 //
-// 1. The on-disk 'struct File' is mapped into the part of memory
-//    that maps the disk.  This memory is kept private to the file
-//    server.
-// 2. Each open file has a 'struct Fd' as well, which sort of
-//    corresponds to a Unix file descriptor.  This 'struct Fd' is kept
-//    on *its own page* in memory, and it is shared with any
-//    environments that have the file open.
-// 3. 'struct OpenFile' links these other two structures, and is kept
-//    private to the file server.  The server maintains an array of
-//    all open files, indexed by "file ID".  (There can be at most
-//    MAXOPEN files open concurrently.)  The client uses file IDs to
-//    communicate with the server.  File IDs are a lot like
-//    environment IDs in the kernel.  Use openfile_lookup to translate
-//    file IDs to struct OpenFile.
+// 1. 磁盘上的“结构文件”被映射到映射磁盘的内存部分。该内存保留给文件服务器专用。
 
+// 2. 每个打开的文件也都有一个“ struct Fd”，它对应于一个Unix文件描述符。该“ struct Fd”被保存在内存中的“自己的页面”中，并且与任何打开文件的环境共享。
+
+// 3. 'struct OpenFile'链接其他两个结构，并且对文件服务器保持私有。服务器维护所有打开文件的数组，并按“文件ID”索引。 （最多可以同时打开MAXOPEN文件。）客户端使用文件ID与服务器进行通信。文件ID与内核中的环境ID非常相似。使用openfile_lookup将文件ID转换为结构OpenFile。
+
+// 将真实文件file与用户端打开的文件描述符fd对应在一起
+// 每个被打开的文件对应的struct fd都被映射到FILEVA上的一个物理页，服务器和客户端共享
 struct OpenFile {
-	uint32_t o_fileid;	// file id
-	struct File *o_file;	// mapped descriptor for open file
+	uint32_t o_fileid;	// 文件id
+	struct File *o_file;	// 打开文件映射
 	int o_mode;		// open mode
 	struct Fd *o_fd;	// Fd page
 };
 
-// Max number of open files in the file system at once
+// 一次性能够打开的最大文件数目
 #define MAXOPEN		1024
 #define FILEVA		0xD0000000
 
-// initialize to force into data section
+// 初始化以强制进入数据部分
 struct OpenFile opentab[MAXOPEN] = {
 	{ 0, 0, 1, 0 }
 };
 
-// Virtual address at which to receive page mappings containing client requests.
+// 接收包含客户端请求的页面映射的虚拟地址。
 union Fsipc *fsreq = (union Fsipc *)0x0ffff000;
 
+// 文件服务器初始化
 void
 serve_init(void)
 {
@@ -60,13 +53,13 @@ serve_init(void)
 	}
 }
 
-// Allocate an open file.
+// 分配一个打开文件
 int
 openfile_alloc(struct OpenFile **o)
 {
 	int i, r;
 
-	// Find an available open-file table entry
+	// 查找可用的打开文件表条目
 	for (i = 0; i < MAXOPEN; i++) {
 		switch (pageref(opentab[i].o_fd)) {
 		case 0:
@@ -200,36 +193,44 @@ serve_set_size(envid_t envid, struct Fsreq_set_size *req)
 	return file_set_size(o->o_file, req->req_size);
 }
 
-// Read at most ipc->read.req_n bytes from the current seek position
-// in ipc->read.req_fileid.  Return the bytes read from the file to
-// the caller in ipc->readRet, then update the seek position.  Returns
-// the number of bytes successfully read, or < 0 on error.
+// 首先找到ipc->read->req_fileid对应的OpenFile
 int
 serve_read(envid_t envid, union Fsipc *ipc)
 {
 	struct Fsreq_read *req = &ipc->read;
 	struct Fsret_read *ret = &ipc->readRet;
+	struct OpenFile *of;
+	int r;
 
 	if (debug)
 		cprintf("serve_read %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
 
-	// Lab 5: Your code here:
-	return 0;
+	if ((r = openfile_lookup(envid, req->req_fileid, &of)) < 0)
+		return r;
+	//将内容读回到ret->retbuf中
+	if ((r = file_read(of->o_file, ret->ret_buf, req->req_n, of->o_fd->fd_offset)) < 0)
+		return r;
+	of->o_fd->fd_offset += r;//更新偏移的位置
+	return r;
 }
 
 
-// Write req->req_n bytes from req->req_buf to req_fileid, starting at
-// the current seek position, and update the seek position
-// accordingly.  Extend the file if necessary.  Returns the number of
-// bytes written, or < 0 on error.
+
 int
 serve_write(envid_t envid, struct Fsreq_write *req)
 {
 	if (debug)
 		cprintf("serve_write %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
 
-	// LAB 5: Your code here.
-	panic("serve_write not implemented");
+	int r;
+	struct OpenFile *of;
+
+	if ((r = openfile_lookup(envid, req->req_fileid, &of)) < 0)
+		return r;
+	if ((r = file_write(of->o_file, req->req_buf, req->req_n, of->o_fd->fd_offset)) < 0)
+		return r;
+	of->o_fd->fd_offset += r;
+	return r;
 }
 
 // Stat ipc->stat.req_fileid.  Return the file's struct Stat to the
@@ -300,12 +301,12 @@ serve(void)
 
 	while (1) {
 		perm = 0;
-		req = ipc_recv((int32_t *) &whom, fsreq, &perm);
+		req = ipc_recv((int32_t *) &whom, fsreq, &perm);//接收一个IPC请求
 		if (debug)
 			cprintf("fs req %d from %08x [page %08x: %s]\n",
 				req, whom, uvpt[PGNUM(fsreq)], fsreq);
 
-		// All requests must contain an argument page
+		// 所有请求必须包含一个参数页面
 		if (!(perm & PTE_P)) {
 			cprintf("Invalid request from %08x: no argument page\n",
 				whom);
@@ -321,7 +322,7 @@ serve(void)
 			cprintf("Invalid request code %d from %08x\n", req, whom);
 			r = -E_INVAL;
 		}
-		ipc_send(whom, r, pg, perm);
+		ipc_send(whom, r, pg, perm);//回发响应结果
 		sys_page_unmap(0, fsreq);
 	}
 }

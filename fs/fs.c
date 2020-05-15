@@ -7,7 +7,7 @@
 // Super block
 // --------------------------------------------------------------
 
-// Validate the file system super-block.
+// 检查superblock
 void
 check_super(void)
 {
@@ -21,11 +21,11 @@ check_super(void)
 }
 
 // --------------------------------------------------------------
-// Free block bitmap
+// 空闲的块位图
 // --------------------------------------------------------------
 
-// Check to see if the block bitmap indicates that block 'blockno' is free.
-// Return 1 if the block is free, 0 if not.
+// 检查块位图是否指示块“blockno”空闲
+// 返回1为空闲
 bool
 block_is_free(uint32_t blockno)
 {
@@ -36,7 +36,7 @@ block_is_free(uint32_t blockno)
 	return 0;
 }
 
-// Mark a block free in the bitmap
+//在位图中标记空闲块
 void
 free_block(uint32_t blockno)
 {
@@ -46,40 +46,34 @@ free_block(uint32_t blockno)
 	bitmap[blockno/32] |= 1<<(blockno%32);
 }
 
-// Search the bitmap for a free block and allocate it.  When you
-// allocate a block, immediately flush the changed bitmap block
-// to disk.
-//
-// Return block number allocated on success,
-// -E_NO_DISK if we are out of blocks.
-//
-// Hint: use free_block as an example for manipulating the bitmap.
+// 分配一个磁盘块，返回磁盘块号，并标记位图
 int
 alloc_block(void)
 {
-	// The bitmap consists of one or more blocks.  A single bitmap block
-	// contains the in-use bits for BLKBITSIZE blocks.  There are
-	// super->s_nblocks blocks in the disk altogether.
-
-	// LAB 5: Your code here.
-	panic("alloc_block not implemented");
+	uint32_t blockno;
+	//是2还是3。。。。。。。。。。
+	for(blockno=2; blockno<super->s_nblocks; blockno++){
+		if(block_is_free(blockno)==1){
+			bitmap[blockno/32] &= ~(1<<(blockno%32)); //将该空闲块设为used，0=used
+			flush_block(diskaddr(blockno));	//将bitmap对应块刷新回磁盘
+			return blockno;
+		}
+	}
 	return -E_NO_DISK;
 }
 
-// Validate the file system bitmap.
+// // 验证文件系统位图。
 //
-// Check that all reserved blocks -- 0, 1, and the bitmap blocks themselves --
-// are all marked as in-use.
 void
 check_bitmap(void)
 {
 	uint32_t i;
 
-	// Make sure all bitmap blocks are marked in-use
+	// 确保所有位图块都标记为使用
 	for (i = 0; i * BLKBITSIZE < super->s_nblocks; i++)
 		assert(!block_is_free(2+i));
 
-	// Make sure the reserved and root blocks are marked in-use.
+	// 确保保留块和根块已标记为使用中。
 	assert(!block_is_free(0));
 	assert(!block_is_free(1));
 
@@ -92,13 +86,13 @@ check_bitmap(void)
 
 
 
-// Initialize the file system
+// 初始化文件系统
 void
 fs_init(void)
 {
 	static_assert(sizeof(struct File) == 256);
 
-	// Find a JOS disk.  Use the second IDE disk (number 1) if available
+	// 使用第二个IDE磁盘（编号1）（如果有）
 	if (ide_probe_disk1())
 		ide_set_disk(1);
 	else
@@ -109,54 +103,62 @@ fs_init(void)
 	super = diskaddr(1);
 	check_super();
 
-	// Set "bitmap" to the beginning of the first bitmap block.
+	// 将“位图”设置为第一个位图块的开头。
 	bitmap = diskaddr(2);
 	check_bitmap();
 	
 }
 
-// Find the disk block number slot for the 'filebno'th block in file 'f'.
-// Set '*ppdiskbno' to point to that slot.
-// The slot will be one of the f->f_direct[] entries,
-// or an entry in the indirect block.
-// When 'alloc' is set, this function will allocate an indirect block
-// if necessary.
-//
-// Returns:
-//	0 on success (but note that *ppdiskbno might equal 0).
-//	-E_NOT_FOUND if the function needed to allocate an indirect block, but
-//		alloc was 0.
-//	-E_NO_DISK if there's no space on the disk for an indirect block.
-//	-E_INVAL if filebno is out of range (it's >= NDIRECT + NINDIRECT).
-//
-// Analogy: This is like pgdir_walk for files.
-// Hint: Don't forget to clear any block you allocate.
+// // 文件结构f的第filebno个块指向的磁盘块号放入ppdiskbno中
 static int
 file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool alloc)
 {
-       // LAB 5: Your code here.
-       panic("file_block_walk not implemented");
+
+    if (filebno > NDIRECT + NINDIRECT)//文件所在的磁盘块不能超过总共的块
+		return -E_INVAL;
+	if (filebno < NDIRECT) {
+		*ppdiskbno = &f->f_direct[filebno];//直接为第n个块
+		return 0;
+	}
+	if (f->f_indirect == 0 && !alloc)
+		return -E_NOT_FOUND;
+
+	if (f->f_indirect == 0) {//没有间接块
+		int blockno = alloc_block();
+		if (blockno < 0) return blockno;
+		f->f_indirect = blockno;//	间接磁盘块
+		memset(diskaddr(f->f_indirect), 0, BLKSIZE);
+	}
+
+	uint32_t *addr = (uint32_t *)diskaddr(f->f_indirect);
+	*ppdiskbno = &addr[filebno - NDIRECT];//在间接块中对应的磁盘号
+	return 0;
 }
 
-// Set *blk to the address in memory where the filebno'th
-// block of file 'f' would be mapped.
-//
-// Returns 0 on success, < 0 on error.  Errors are:
-//	-E_NO_DISK if a block needed to be allocated but the disk is full.
-//	-E_INVAL if filebno is out of range.
-//
-// Hint: Use file_block_walk and alloc_block.
+// // 从磁盘读取一个块，并映射到对应的服务器进程空间
 int
 file_get_block(struct File *f, uint32_t filebno, char **blk)
 {
-       // LAB 5: Your code here.
-       panic("file_get_block not implemented");
+    // LAB 5: Your code here.
+	uint32_t *pdiskbno;
+	int r;
+
+    if (filebno > NDIRECT + NINDIRECT)
+		return -E_INVAL;
+	if ((r = file_block_walk(f, filebno, &pdiskbno, true)) < 0)
+		return r; // -E_NO_DISK
+	//ppdiskbno是f的第filebno块的块号所在的槽的地址
+	//blk要的是这个块映射到内存里的地址
+	if (*pdiskbno == 0) {
+		if ((r = alloc_block()) < 0)
+			return r; // -E_NO_DISK
+		*pdiskbno = r;
+	}
+	*blk = (char *)diskaddr(*pdiskbno);
+	return 0;
 }
 
-// Try to find a file named "name" in dir.  If so, set *file to it.
-//
-// Returns 0 and sets *file on success, < 0 on error.  Errors are:
-//	-E_NOT_FOUND if the file is not found
+// 在dir中找到为name的文件，并放入*file中
 static int
 dir_lookup(struct File *dir, const char *name, struct File **file)
 {
@@ -165,9 +167,8 @@ dir_lookup(struct File *dir, const char *name, struct File **file)
 	char *blk;
 	struct File *f;
 
-	// Search dir for name.
-	// We maintain the invariant that the size of a directory-file
-	// is always a multiple of the file system's block size.
+	// 搜索目录名
+	// 目录文件的大小始终是文件系统块大小的倍数是不变的。
 	assert((dir->f_size % BLKSIZE) == 0);
 	nblock = dir->f_size / BLKSIZE;
 	for (i = 0; i < nblock; i++) {
@@ -183,8 +184,7 @@ dir_lookup(struct File *dir, const char *name, struct File **file)
 	return -E_NOT_FOUND;
 }
 
-// Set *file to point at a free File structure in dir.  The caller is
-// responsible for filling in the File fields.
+//// 在指定目录dir下分配一个file，用于添加文件的操作
 static int
 dir_alloc_file(struct File *dir, struct File **file)
 {
@@ -213,7 +213,7 @@ dir_alloc_file(struct File *dir, struct File **file)
 	return 0;
 }
 
-// Skip over slashes.
+// 跳过斜线。
 static const char*
 skip_slash(const char *p)
 {
@@ -222,12 +222,7 @@ skip_slash(const char *p)
 	return p;
 }
 
-// Evaluate a path name, starting at the root.
-// On success, set *pf to the file we found
-// and set *pdir to the directory the file is in.
-// If we cannot find the file but find the directory
-// it should be in, set *pdir and copy the final path
-// element into lastelem.
+// // 根据路径遍历文件系统，有要找的文件*pf，将其所在的目录赋值给**pdir，没有则把剩下的路径复制在lastelem中
 static int
 walk_path(const char *path, struct File **pdir, struct File **pf, char *lastelem)
 {
@@ -279,11 +274,10 @@ walk_path(const char *path, struct File **pdir, struct File **pf, char *lastelem
 }
 
 // --------------------------------------------------------------
-// File operations
+// 文件操作
 // --------------------------------------------------------------
 
-// Create "path".  On success set *pf to point at the file and return 0.
-// On error return < 0.
+// 建立一个path文件
 int
 file_create(const char *path, struct File **pf)
 {
@@ -304,17 +298,14 @@ file_create(const char *path, struct File **pf)
 	return 0;
 }
 
-// Open "path".  On success set *pf to point at the file and return 0.
-// On error return < 0.
+// // 打开一个文件
 int
 file_open(const char *path, struct File **pf)
 {
 	return walk_path(path, 0, pf, 0);
 }
 
-// Read count bytes from f into buf, starting from seek position
-// offset.  This meant to mimic the standard pread function.
-// Returns the number of bytes read, < 0 on error.
+// 从查找位置偏移量开始，将f的计数字节读取到buf中。
 ssize_t
 file_read(struct File *f, void *buf, size_t count, off_t offset)
 {
@@ -351,7 +342,7 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	off_t pos;
 	char *blk;
 
-	// Extend file if necessary
+	// 写入的内容超过文件的大小就扩展
 	if (offset + count > f->f_size)
 		if ((r = file_set_size(f, offset + count)) < 0)
 			return r;
@@ -368,8 +359,7 @@ file_write(struct File *f, const void *buf, size_t count, off_t offset)
 	return count;
 }
 
-// Remove a block from file f.  If it's not there, just silently succeed.
-// Returns 0 on success, < 0 on error.
+// 释放一个文件中的第filebno个磁盘块（file_truncate_blocks）
 static int
 file_free_block(struct File *f, uint32_t filebno)
 {
@@ -385,15 +375,7 @@ file_free_block(struct File *f, uint32_t filebno)
 	return 0;
 }
 
-// Remove any blocks currently used by file 'f',
-// but not necessary for a file of size 'newsize'.
-// For both the old and new sizes, figure out the number of blocks required,
-// and then clear the blocks from new_nblocks to old_nblocks.
-// If the new_nblocks is no more than NDIRECT, and the indirect block has
-// been allocated (f->f_indirect != 0), then free the indirect block too.
-// (Remember to clear the f->f_indirect pointer so you'll know
-// whether it's valid!)
-// Do not change f->f_size.
+// 将文件设置为缩小后新大小，清空那些被释放的物理块
 static void
 file_truncate_blocks(struct File *f, off_t newsize)
 {
@@ -412,7 +394,7 @@ file_truncate_blocks(struct File *f, off_t newsize)
 	}
 }
 
-// Set the size of file f, truncating or extending as necessary.
+// 设置文件f的大小
 int
 file_set_size(struct File *f, off_t newsize)
 {
@@ -423,10 +405,7 @@ file_set_size(struct File *f, off_t newsize)
 	return 0;
 }
 
-// Flush the contents and metadata of file f out to disk.
-// Loop over all the blocks in file.
-// Translate the file block number into a disk block number
-// and then check whether that disk block is dirty.  If so, write it out.
+// 将文件的内容同步到磁盘上
 void
 file_flush(struct File *f)
 {
@@ -445,7 +424,7 @@ file_flush(struct File *f)
 }
 
 
-// Sync the entire file system.  A big hammer.
+// 同步磁盘上所有数据
 void
 fs_sync(void)
 {

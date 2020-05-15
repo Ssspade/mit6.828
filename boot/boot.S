@@ -7,15 +7,16 @@
 
 .set PROT_MODE_CSEG, 0x8         # kernel code segment selector
 .set PROT_MODE_DSEG, 0x10        # kernel data segment selector
-.set CR0_PE_ON,      0x1         # protected mode enable flag
+.set CR0_PE_ON,      0x1         # protected mode enable flag保护模式的flag
 
 .globl start
 start:
   .code16                     # Assemble for 16-bit mode
-  cli                         # Disable interrupts
+  cli                         # Disable interrupts  关中断
   cld                         # String operations increment
 
-  # Set up the important data segment registers (DS, ES, SS).
+  # Set up the important data segment registers (DS, ES, SS).初始化重要的数据寄存器
+  #  movw字节传送16位
   xorw    %ax,%ax             # Segment number zero
   movw    %ax,%ds             # -> Data Segment
   movw    %ax,%es             # -> Extra Segment
@@ -25,6 +26,8 @@ start:
   #   For backwards compatibility with the earliest PCs, physical
   #   address line 20 is tied low, so that addresses higher than
   #   1MB wrap around to zero by default.  This code undoes this.
+  #  为了向后兼容物理地址行20被限制在较低的位置
+  #  默认大于1mb的地址会被包装成零，此段是撤销他
 seta20.1:
   inb     $0x64,%al               # Wait for not busy
   testb   $0x2,%al
@@ -45,16 +48,18 @@ seta20.2:
   # and segment translation that makes virtual addresses 
   # identical to their physical addresses, so that the 
   # effective memory map does not change during the switch.
-  lgdt    gdtdesc
+  # 从实模式切换到保护模式，使用GDT和段转换使虚拟地质与物理地址相同
+  # 这样在切换期间有效内存不会改变
+  lgdt    gdtdesc		  #装载全局描述符的基地址和长度入全局描述符表寄存器
   movl    %cr0, %eax
   orl     $CR0_PE_ON, %eax
   movl    %eax, %cr0
   
   # Jump to next instruction, but in 32-bit code segment.
-  # Switches processor into 32-bit mode.
+  # Switches processor into 32-bit mode.  将处理器切换到32位代码段中
   ljmp    $PROT_MODE_CSEG, $protcseg
-
-  .code32                     # Assemble for 32-bit mode
+  # 将cs寄存器的值变为PROT_MODE_CSEG（0x8） EIP变为protcseg代码段的值
+  .code32                     # Assemble for 32-bit mode  处于保护模式下
 protcseg:
   # Set up the protected-mode data segment registers
   movw    $PROT_MODE_DSEG, %ax    # Our data segment selector
@@ -64,7 +69,7 @@ protcseg:
   movw    %ax, %gs                # -> GS
   movw    %ax, %ss                # -> SS: Stack Segment
   
-  # Set up the stack pointer and call into C.
+  # Set up the stack pointer and call into C. 设定栈
   movl    $start, %esp
   call bootmain
 

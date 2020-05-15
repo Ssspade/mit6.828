@@ -1,7 +1,8 @@
 
 #include "fs.h"
+////////////////////磁盘块缓冲////////////////////////////
 
-// Return the virtual address of this disk block.
+// 返回磁盘块映射的虚拟地址
 void*
 diskaddr(uint32_t blockno)
 {
@@ -10,22 +11,21 @@ diskaddr(uint32_t blockno)
 	return (char*) (DISKMAP + blockno * BLKSIZE);
 }
 
-// Is this virtual address mapped?
+// 判断虚拟地址在服务器进程中是否被映射
 bool
 va_is_mapped(void *va)
 {
 	return (uvpd[PDX(va)] & PTE_P) && (uvpt[PGNUM(va)] & PTE_P);
 }
 
-// Is this virtual address dirty?
+// 判断va的内容是否被修改
 bool
 va_is_dirty(void *va)
 {
 	return (uvpt[PGNUM(va)] & PTE_D) != 0;
 }
 
-// Fault any disk block that is read in to memory by
-// loading it from disk.
+// 页面错误处理程序，将磁盘加载到内存
 static void
 bc_pgfault(struct UTrapframe *utf)
 {
@@ -33,30 +33,23 @@ bc_pgfault(struct UTrapframe *utf)
 	uint32_t blockno = ((uint32_t)addr - DISKMAP) / BLKSIZE;
 	int r;
 
-	// Check that the fault was within the block cache region
 	if (addr < (void*)DISKMAP || addr >= (void*)(DISKMAP + DISKSIZE))
 		panic("page fault in FS: eip %08x, va %08x, err %04x",
 		      utf->utf_eip, addr, utf->utf_err);
 
-	// Sanity check the block number.
 	if (super && blockno >= super->s_nblocks)
 		panic("reading non-existent block %08x\n", blockno);
 
-	// Allocate a page in the disk map region, read the contents
-	// of the block from the disk into that page.
-	// Hint: first round addr to page boundary. fs/ide.c has code to read
-	// the disk.
-	//
-	// LAB 5: you code here:
-
-	// Clear the dirty bit for the disk block page since we just read the
-	// block from disk
+	addr = (void *)ROUNDDOWN(addr, BLKSIZE);		//对其
+	r = sys_page_alloc(0, addr, PTE_P|PTE_U|PTE_W);
+	if(r)
+		panic("sys_page_alloc fault!\n");
+	r = ide_read(blockno*8, addr, BLKSECTS);
+	if(r)
+		panic("ide_read fault!\n");
+	// 清除磁盘块页面的脏位，因为我们只是从磁盘读取了该块
 	if ((r = sys_page_map(0, addr, 0, addr, uvpt[PGNUM(addr)] & PTE_SYSCALL)) < 0)
 		panic("in bc_pgfault, sys_page_map: %e", r);
-
-	// Check that the block we read was allocated. (exercise for
-	// the reader: why do we do this *after* reading the block
-	// in?)
 	if (bitmap && block_is_free(blockno))
 		panic("reading free block %08x\n", blockno);
 }
@@ -76,8 +69,20 @@ flush_block(void *addr)
 	if (addr < (void*)DISKMAP || addr >= (void*)(DISKMAP + DISKSIZE))
 		panic("flush_block of bad va %08x", addr);
 
-	// LAB 5: Your code here.
-	panic("flush_block not implemented");
+	addr = (void *)ROUNDDOWN(addr,BLKSIZE);	//对齐！
+	int r,m;
+	r = va_is_mapped(addr);
+	m = va_is_dirty(addr);
+	if(r&&m){
+		if((r = ide_write(blockno*8, addr, BLKSECTS))<0){
+			panic("ide_write fault!\n");
+		}
+		//刷新了磁盘，所以需要清除脏位
+		if((r = sys_page_map(0, addr, 0, addr,uvpt[PGNUM(addr)] & PTE_SYSCALL))<0){
+			panic("sys_page_map fault!\n");
+		}
+	}
+	
 }
 
 // Test that the block cache works, by smashing the superblock and

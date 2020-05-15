@@ -87,7 +87,7 @@ alloc(uint32_t bytes)
 		panic("out of disk blocks");
 	return start;
 }
-
+// 创建映像文件，并为super和bitmap分配好空间
 void
 opendisk(const char *name)
 {
@@ -231,14 +231,14 @@ main(int argc, char **argv)
 	if (*s || s == argv[2] || nblocks < 2 || nblocks > 1024)
 		usage();
 
-	opendisk(argv[1]);
+	opendisk(argv[1]);	//创建一个磁盘文件
 
-	startdir(&super->s_root, &root);
+	startdir(&super->s_root, &root);	//创建根目录，初始化超级块
 	for (i = 3; i < argc; i++)
-		writefile(&root, argv[i]);
-	finishdir(&root);
+		writefile(&root, argv[i]);	//将目标文件写入磁盘映像
+	finishdir(&root);		//将根目录写入磁盘映像
 
-	finishdisk();
+	finishdisk();		//将块位图设置为正确的值完成磁盘映像的创建
 	return 0;
 }
 
